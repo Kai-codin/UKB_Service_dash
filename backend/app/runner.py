@@ -76,7 +76,7 @@ def start_command(db: Session, command_id: int):
     # start background thread to write stdout to file and update DB
     t = threading.Thread(target=_stream_output, args=(proc, log_path, command.id, log.id), daemon=True)
     t.start()
-    return proc.pid, log_path
+    return proc.pid, log_path, cmd
 
 
 def stop_command(db: Session, command_id: int):

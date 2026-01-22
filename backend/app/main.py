@@ -92,7 +92,20 @@ def get_command_detail(command_id: int, db: Session = Depends(database.get_db), 
     c = crud.get_command(db, command_id)
     if not c:
         raise HTTPException(status_code=404, detail="Command not found")
-    return c
+    run_cmd = None
+    try:
+        run_cmd = runner.build_command(c)
+    except Exception:
+        run_cmd = None
+    return {
+        "id": c.id,
+        "name": c.name,
+        "command_template": c.command_template,
+        "site_id": c.site_id,
+        "envs": [{"id": e.id, "key": e.key, "value": e.value} for e in c.envs],
+        "current_pid": c.current_pid,
+        "run_command": run_cmd,
+    }
 
 
 @app.put("/api/commands/{command_id}")
@@ -119,10 +132,10 @@ def remove_command(command_id: int, db: Session = Depends(database.get_db), _=De
 @app.post("/api/commands/{command_id}/start")
 def start(command_id: int, db: Session = Depends(database.get_db), _=Depends(auth.require_perm("start service"))):
     try:
-        pid, log = runner.start_command(db, command_id)
+        pid, log, cmd = runner.start_command(db, command_id)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-    return {"pid": pid, "log": log}
+    return {"pid": pid, "log": log, "command": cmd}
 
 
 @app.post("/api/commands/{command_id}/stop")
@@ -130,7 +143,17 @@ def stop(command_id: int, db: Session = Depends(database.get_db), _=Depends(auth
     try:
         runner.stop_command(db, command_id)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        msg = str(e)
+        # if not running, return a friendly status instead of 400
+        if "not running" in msg.lower():
+            cmd = crud.get_command(db, command_id)
+            run_cmd = None
+            try:
+                run_cmd = runner.build_command(cmd) if cmd else None
+            except Exception:
+                run_cmd = None
+            return {"status": "not_running", "message": msg, "command": run_cmd}
+        raise HTTPException(status_code=400, detail=msg)
     return {"status": "stopped"}
 
 
