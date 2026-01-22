@@ -21,9 +21,13 @@ def build_command(command: models.Command):
     parts = []
     if site and site.base_path:
         parts.append(f"cd {shlex.quote(site.base_path)}")
+    # If there is a base_command, prepend it to the formatted template so
+    # the final executed command becomes: cd <path> && <base_command> <template>
     if site and site.base_command:
-        parts.append(site.base_command)
-    parts.append(formatted)
+        body = f"{site.base_command} {formatted}".strip()
+    else:
+        body = formatted
+    parts.append(body)
     return " && ".join([p for p in parts if p])
 
 
