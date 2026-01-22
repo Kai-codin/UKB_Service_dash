@@ -3,11 +3,18 @@ services:
   web:
     build: ./backend
     ports:
-      - "8000:8000"
+      - "8089:8000"
     volumes:
       - ./backend/app.db:/app/backend/app.db
       - ./backend/logs:/app/backend/logs
-      - ./backend:/app/backend:ro
+      - ./backend:/app/backend
     environment:
       - PYTHONUNBUFFERED=1
+
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.web.rule=Host(`dash.ukbuses.org`)
+      - traefik.http.routers.web.entrypoints=web
+      - traefik.http.routers.web.service=mbt-web-service
+      - traefik.http.services.web-service.loadbalancer.server.port=8000
     restart: unless-stopped
