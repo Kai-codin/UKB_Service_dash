@@ -39,6 +39,56 @@ def get_command(db: Session, command_id: int):
     return db.query(models.Command).filter(models.Command.id == command_id).first()
 
 
+def update_site(db: Session, site_id: int, site: dict):
+    s = db.query(models.Site).filter(models.Site.id == site_id).first()
+    if not s:
+        return None
+    s.name = site.get('name', s.name)
+    s.base_path = site.get('base_path', s.base_path)
+    s.base_command = site.get('base_command', s.base_command)
+    db.add(s)
+    db.commit()
+    db.refresh(s)
+    return s
+
+
+def delete_site(db: Session, site_id: int):
+    s = db.query(models.Site).filter(models.Site.id == site_id).first()
+    if not s:
+        return False
+    db.delete(s)
+    db.commit()
+    return True
+
+
+def update_command(db: Session, command_id: int, data: dict):
+    c = db.query(models.Command).filter(models.Command.id == command_id).first()
+    if not c:
+        return None
+    c.name = data.get('name', c.name)
+    c.command_template = data.get('command_template', c.command_template)
+    # replace envs if provided
+    if 'envs' in data:
+        # delete existing
+        db.query(models.Env).filter(models.Env.command_id == c.id).delete(synchronize_session=False)
+        for e in data.get('envs', []):
+            env = models.Env(command_id=c.id, key=e.get('key'), value=e.get('value'))
+            db.add(env)
+    db.add(c)
+    db.commit()
+    db.refresh(c)
+    return c
+
+
+def delete_command(db: Session, command_id: int):
+    c = db.query(models.Command).filter(models.Command.id == command_id).first()
+    if not c:
+        return False
+    db.delete(c)
+    db.commit()
+    return True
+
+
 def create_user(db: Session, username: str, email: str, password_hash: str, perms: str = ""):
     u = models.User(username=username, email=email, password_hash=password_hash, perms=perms)
     db.add(u)

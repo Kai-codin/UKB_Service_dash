@@ -26,9 +26,16 @@ async function loadSites(){
   const sites = await res.json();
   const ul = document.getElementById('sites'); ul.innerHTML='';
   for(const s of sites){
-    const li = document.createElement('li'); li.className='list-group-item';
-    li.innerHTML = `<strong>${s.name}</strong><br/><small>${s.base_path}</small>`;
-    li.addEventListener('click', ()=> loadCommands(s.id));
+    const li = document.createElement('li'); li.className='list-group-item d-flex justify-content-between align-items-start';
+    const left = document.createElement('div');
+    left.innerHTML = `<div><strong>${s.name}</strong></div><div class='small text-muted'>${s.base_path}</div>`;
+    const right = document.createElement('div');
+    const openBtn = document.createElement('button'); openBtn.className='btn btn-sm btn-link'; openBtn.innerText='Open';
+    openBtn.addEventListener('click', ()=> loadCommands(s.id));
+    const editBtn = document.createElement('button'); editBtn.className='btn btn-sm btn-link'; editBtn.innerText='Edit';
+    editBtn.addEventListener('click', ()=> showEditSite(s));
+    right.appendChild(openBtn); right.appendChild(editBtn);
+    li.appendChild(left); li.appendChild(right);
     ul.appendChild(li);
   }
 }
@@ -68,9 +75,18 @@ async function loadCommands(site_id){
   for(const c of cmds){
     const card = document.createElement('div'); card.className='card mb-2';
     card.innerHTML = `<div class='card-body'><h5>${c.name}</h5><pre>${c.command_template}</pre>
-      <button class='btn btn-sm btn-primary start'>Start</button>
-      <button class='btn btn-sm btn-danger stop'>Stop</button>
-      <button class='btn btn-sm btn-secondary viewlog'>View Log</button>
+      <div class='btn-group mb-2' role='group'>
+        <button class='btn btn-sm btn-primary start'>Start</button>
+        <button class='btn btn-sm btn-danger stop'>Stop</button>
+        <button class='btn btn-sm btn-secondary viewlog'>View Log</button>
+        <button class='btn btn-sm btn-outline-secondary edit'>Edit</button>
+      </div>
+      <div class='editForm' style='display:none; border-top:1px solid #eee; padding-top:8px;'>
+        <input class='form-control mb-1 editName' placeholder='name' />
+        <input class='form-control mb-1 editTemplate' placeholder='command template' />
+        <textarea class='form-control mb-1 editEnvs' placeholder='envs, one per line key=value'></textarea>
+        <div><button class='btn btn-sm btn-success save'>Save</button> <button class='btn btn-sm btn-danger del'>Delete</button></div>
+      </div>
       <div class='log mt-2' style='white-space:pre-wrap; background:#111; color:#0f0; padding:8px; display:none; max-height:300px; overflow:auto;'></div>
       </div>`;
     container.appendChild(card);
@@ -89,5 +105,67 @@ async function loadCommands(site_id){
       lbox.style.display = 'block';
       lbox.innerText = j.output || '(no output yet)';
     });
+    card.querySelector('.edit').addEventListener('click', async ()=>{
+      const form = card.querySelector('.editForm');
+      const nameIn = card.querySelector('.editName');
+      const tplIn = card.querySelector('.editTemplate');
+      const envsIn = card.querySelector('.editEnvs');
+      // load details
+      const r = await fetch(`/api/commands/${c.id}`, {headers:{'Authorization':'Bearer '+token}});
+      if (r.ok){
+        const data = await r.json();
+        nameIn.value = data.name || '';
+        tplIn.value = data.command_template || '';
+        envsIn.value = (data.envs || []).map(e=>`${e.key}=${e.value}`).join('\n');
+        form.style.display = form.style.display==='none' ? 'block' : 'none';
+      }
+    });
+    card.querySelector('.save').addEventListener('click', async ()=>{
+      const form = card.querySelector('.editForm');
+      const name = card.querySelector('.editName').value;
+      const tpl = card.querySelector('.editTemplate').value;
+      const envText = card.querySelector('.editEnvs').value.trim();
+      const envs = envText ? envText.split('\n').map(l=>{const [k,...v]=l.split('='); return {key:k.trim(), value:v.join('=').trim()}}) : [];
+      await fetch(`/api/commands/${c.id}`, {method:'PUT', headers:{'Content-Type':'application/json','Authorization':'Bearer '+token}, body:JSON.stringify({name,command_template:tpl,envs})});
+      alert('Saved');
+      form.style.display='none';
+      loadCommands(c.site_id);
+    });
+    card.querySelector('.del').addEventListener('click', async ()=>{
+      if (!confirm('Delete this command?')) return;
+      await fetch(`/api/commands/${c.id}`, {method:'DELETE', headers:{'Authorization':'Bearer '+token}});
+      loadCommands(c.site_id);
+    });
   }
+}
+
+function showEditSite(s){
+  // show a modal-like inline editor at top
+  let box = document.getElementById('siteEditor');
+  if (!box){
+    box = document.createElement('div'); box.id='siteEditor'; box.className='mb-3'; document.querySelector('#app .container')?.prepend(box);
+  }
+  box.innerHTML = `
+    <h5>Edit Site</h5>
+    <input id='editSiteName' class='form-control mb-1' />
+    <input id='editSitePath' class='form-control mb-1' />
+    <input id='editSiteBaseCmd' class='form-control mb-1' />
+    <div><button id='saveSite' class='btn btn-sm btn-success'>Save</button> <button id='delSite' class='btn btn-sm btn-danger'>Delete</button></div>
+    <hr>
+  `;
+  document.getElementById('editSiteName').value = s.name || '';
+  document.getElementById('editSitePath').value = s.base_path || '';
+  document.getElementById('editSiteBaseCmd').value = s.base_command || '';
+  document.getElementById('saveSite').addEventListener('click', async ()=>{
+    const name = document.getElementById('editSiteName').value;
+    const base_path = document.getElementById('editSitePath').value;
+    const base_command = document.getElementById('editSiteBaseCmd').value;
+    await fetch(`/api/sites/${s.id}`, {method:'PUT', headers:{'Content-Type':'application/json','Authorization':'Bearer '+token}, body:JSON.stringify({name,base_path,base_command})});
+    loadSites();
+  });
+  document.getElementById('delSite').addEventListener('click', async ()=>{
+    if (!confirm('Delete this site and its commands?')) return;
+    await fetch(`/api/sites/${s.id}`, {method:'DELETE', headers:{'Authorization':'Bearer '+token}});
+    loadSites();
+  });
 }

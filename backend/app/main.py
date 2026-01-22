@@ -53,6 +53,30 @@ def add_site(site: schemas.SiteCreate, db: Session = Depends(database.get_db), _
     return crud.create_site(db, site)
 
 
+@app.get("/api/sites/{site_id}")
+def get_site(site_id: int, db: Session = Depends(database.get_db), user: models.User = Depends(auth.get_current_user)):
+    s = crud.get_site(db, site_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="Site not found")
+    return s
+
+
+@app.put("/api/sites/{site_id}")
+def edit_site(site_id: int, site: schemas.SiteCreate, db: Session = Depends(database.get_db), _=Depends(auth.require_perm("edit site"))):
+    s = crud.update_site(db, site_id, site.dict())
+    if not s:
+        raise HTTPException(status_code=404, detail="Site not found")
+    return s
+
+
+@app.delete("/api/sites/{site_id}")
+def remove_site(site_id: int, db: Session = Depends(database.get_db), _=Depends(auth.require_perm("edit site"))):
+    ok = crud.delete_site(db, site_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Site not found")
+    return {"status": "deleted"}
+
+
 @app.get("/api/sites/{site_id}/commands")
 def get_commands(site_id: int, db: Session = Depends(database.get_db), user: models.User = Depends(auth.get_current_user)):
     return crud.get_commands_for_site(db, site_id)
@@ -61,6 +85,35 @@ def get_commands(site_id: int, db: Session = Depends(database.get_db), user: mod
 @app.post("/api/commands")
 def add_command(command: schemas.CommandCreate, db: Session = Depends(database.get_db), _=Depends(auth.require_perm("add service"))):
     return crud.create_command(db, command)
+
+
+@app.get("/api/commands/{command_id}")
+def get_command_detail(command_id: int, db: Session = Depends(database.get_db), user: models.User = Depends(auth.get_current_user)):
+    c = crud.get_command(db, command_id)
+    if not c:
+        raise HTTPException(status_code=404, detail="Command not found")
+    return c
+
+
+@app.put("/api/commands/{command_id}")
+def edit_command(command_id: int, command: schemas.CommandCreate, db: Session = Depends(database.get_db), _=Depends(auth.require_perm("edit service"))):
+    # allow updating name, template and envs
+    data = command.dict()
+    # command.site_id may or may not change; keep original if omitted
+    if 'site_id' not in data or data.get('site_id') is None:
+        data['site_id'] = crud.get_command(db, command_id).site_id
+    c = crud.update_command(db, command_id, data)
+    if not c:
+        raise HTTPException(status_code=404, detail="Command not found")
+    return c
+
+
+@app.delete("/api/commands/{command_id}")
+def remove_command(command_id: int, db: Session = Depends(database.get_db), _=Depends(auth.require_perm("edit service"))):
+    ok = crud.delete_command(db, command_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Command not found")
+    return {"status": "deleted"}
 
 
 @app.post("/api/commands/{command_id}/start")
