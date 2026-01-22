@@ -40,8 +40,8 @@ class CommandBase(BaseModel):
 
 
 class CommandCreate(CommandBase):
-    site_id: int
-    envs: Optional[List[EnvCreate]] = []
+    site_id: Optional[int] = None
+    envs: Optional[List[EnvCreate]] = None
 
 
 class Command(CommandBase):

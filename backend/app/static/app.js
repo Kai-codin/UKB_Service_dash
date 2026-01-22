@@ -91,19 +91,48 @@ async function loadCommands(site_id){
       </div>`;
     container.appendChild(card);
     card.querySelector('.start').addEventListener('click', async ()=>{
-      await fetch(`/api/commands/${c.id}/start`, {method:'POST', headers:{'Authorization':'Bearer '+token}});
-      alert('Started');
+      const res = await fetch(`/api/commands/${c.id}/start`, {method:'POST', headers:{'Authorization':'Bearer '+token}});
+      if (!res.ok){
+        let msg = res.statusText;
+        try{ const j = await res.json(); msg = j.detail || j.error || msg }catch(e){}
+        alert('Start failed: '+msg);
+        return;
+      }
+      const j = await res.json();
+      alert('Started (pid: '+j.pid+')');
     });
     card.querySelector('.stop').addEventListener('click', async ()=>{
-      await fetch(`/api/commands/${c.id}/stop`, {method:'POST', headers:{'Authorization':'Bearer '+token}});
+      const res = await fetch(`/api/commands/${c.id}/stop`, {method:'POST', headers:{'Authorization':'Bearer '+token}});
+      if (!res.ok){
+        let msg = res.statusText;
+        try{ const j = await res.json(); msg = j.detail || j.error || msg }catch(e){}
+        alert('Stop failed: '+msg);
+        return;
+      }
       alert('Stopped');
     });
     card.querySelector('.viewlog').addEventListener('click', async ()=>{
-      const r = await fetch(`/api/logs/${c.id}`, {headers:{'Authorization':'Bearer '+token}});
-      const j = await r.json();
-      const lbox = card.querySelector('.log');
-      lbox.style.display = 'block';
-      lbox.innerText = j.output || '(no output yet)';
+        // toggle live log polling for this command
+        const lbox = card.querySelector('.log');
+        if (lbox.style.display === 'block' && window._currentLogId === c.id){
+          // stop polling
+          lbox.style.display = 'none';
+          if (window._logPoller) { clearInterval(window._logPoller); window._logPoller = null; }
+          window._currentLogId = null;
+          return;
+        }
+        window._currentLogId = c.id;
+        lbox.style.display = 'block';
+        // immediate fetch + start polling
+        async function fetchLog(){
+          const r = await fetch(`/api/logs/${c.id}`, {headers:{'Authorization':'Bearer '+token}});
+          if (!r.ok) return;
+          const j = await r.json();
+          lbox.innerText = j.output || '(no output yet)';
+        }
+        if (window._logPoller){ clearInterval(window._logPoller); window._logPoller = null; }
+        fetchLog();
+        window._logPoller = setInterval(fetchLog, 2000);
     });
     card.querySelector('.edit').addEventListener('click', async ()=>{
       const form = card.querySelector('.editForm');
@@ -143,7 +172,7 @@ function showEditSite(s){
   // show a modal-like inline editor at top
   let box = document.getElementById('siteEditor');
   if (!box){
-    box = document.createElement('div'); box.id='siteEditor'; box.className='mb-3'; document.querySelector('#app .container')?.prepend(box);
+    box = document.createElement('div'); box.id='siteEditor'; box.className='mb-3'; document.querySelector('#app')?.prepend(box);
   }
   box.innerHTML = `
     <h5>Edit Site</h5>
