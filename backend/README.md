@@ -23,3 +23,14 @@ uvicorn backend.app.main:app --reload
 ```
 
 Open http://127.0.0.1:8000
+
+Docker (development)
+
+Build and run with docker-compose:
+
+```bash
+docker compose build
+docker compose up -d
+```
+
+The service will be available at http://127.0.0.1:8000. The SQLite DB and logs are persisted under `backend/app.db` and `backend/logs/` respectively.
