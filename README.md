@@ -27,6 +27,17 @@ python manage.py createsuperuser_custom --username=admin --email=admin@example.c
 python manage.py runserver
 ```
 
+Production static files
+
+1. Configure `.env` and `DISCORD_WEBHOOK_URL` as needed.
+2. Collect static files before starting the production server:
+
+```bash
+python manage.py collectstatic --noinput
+```
+
+When using the provided Gunicorn systemd unit, make sure `WorkingDirectory` and the virtualenv `PATH` are correct so `collectstatic` runs as part of your deployment process.
+
 Files of interest
 - `dashboard/` - main app with models, admin, and management commands
 - `ukb_service_dash/` - Django project settings and URLs
