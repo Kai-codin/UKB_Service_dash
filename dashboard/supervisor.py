@@ -10,8 +10,9 @@ import sys
 
 from django.conf import settings
 from django.utils import timezone
+from django.db import close_old_connections
 
-from .models import CommandRun, Command, Log
+from .models import CommandRun, Command, Log, Site
 
 import requests
 
@@ -133,15 +134,73 @@ class ProcessSupervisor:
                 # Otherwise fail
                 raise RuntimeError(f"Executable not found: {exe}")
 
-        # Start the process
-        proc = subprocess.Popen(cmd_line, shell=True, cwd=site.base_dir or None, preexec_fn=os.setsid)
+        # Start the process (capture output)
+        proc = subprocess.Popen(
+            cmd_line,
+            shell=True,
+            cwd=site.base_dir or None,
+            preexec_fn=os.setsid,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+        )
         run = CommandRun.objects.create(
             command=command,
             pid=proc.pid,
             restart_count=restart_count,
             manually_stopped=False,
         )
+
+        # start background threads to stream output and monitor process
+        threading.Thread(target=self._monitor_process, args=(proc, site, command, run), daemon=True).start()
         return run
+
+    def _monitor_process(self, proc: subprocess.Popen, site: Site, command: Command, run: CommandRun):
+        # Ensure DB connections are usable in this thread
+        close_old_connections()
+
+        def _read_stream(stream, level):
+            try:
+                for line in iter(stream.readline, ''):
+                    text = line.rstrip('\n')
+                    if text:
+                        Log.objects.create(site=site, command=command, level=level, message=text)
+            except Exception:
+                pass
+            finally:
+                try:
+                    stream.close()
+                except Exception:
+                    pass
+
+        # Start readers
+        if proc.stdout:
+            threading.Thread(target=_read_stream, args=(proc.stdout, 'INFO'), daemon=True).start()
+        if proc.stderr:
+            threading.Thread(target=_read_stream, args=(proc.stderr, 'ERROR'), daemon=True).start()
+
+        # Wait for process to finish
+        try:
+            ret = proc.wait()
+        except Exception as e:
+            ret = None
+
+        # Record stop
+        run.stopped_at = timezone.now()
+        run.exit_code = ret
+        run.save()
+
+        # Log exit
+        Log.objects.create(site=site, command=command, level='INFO', message=f'Process exited with code {ret}')
+
+        # Auto-restart if not manually stopped
+        if not run.manually_stopped:
+            Log.objects.create(site=site, command=command, level='WARNING', message='Process died unexpectedly; attempting restart')
+            try:
+                self.start_command(command, restart_count=run.restart_count + 1)
+            except Exception:
+                Log.objects.create(site=site, command=command, level='ERROR', message='Restart attempt failed')
 
     def stop_command(self, command: Command) -> None:
         runs = CommandRun.objects.filter(command=command, stopped_at__isnull=True)
