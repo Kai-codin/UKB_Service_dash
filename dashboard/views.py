@@ -7,6 +7,8 @@ from django.contrib.auth.decorators import login_required, permission_required
 from django.shortcuts import get_object_or_404, redirect
 from django.http import HttpResponseForbidden, HttpResponse
 from .supervisor import supervisor
+from django.contrib import messages
+from .models import Log
 
 
 class SiteListView(LoginRequiredMixin, ListView):
@@ -111,7 +113,13 @@ def start_command_view(request, pk):
     active = cmd.runs.filter(stopped_at__isnull=True)
     if active.exists():
         return HttpResponse('already running')
-    supervisor.start_command(cmd)
+    try:
+        supervisor.start_command(cmd)
+        messages.success(request, f"Started command '{cmd.name}'.")
+    except RuntimeError as e:
+        # Log the error to the Log model and show message to user
+        Log.objects.create(site=cmd.site, command=cmd, level='ERROR', message=str(e))
+        messages.error(request, f"Could not start command: {e}")
     return redirect('dashboard:command_list')
 
 
