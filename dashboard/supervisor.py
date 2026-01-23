@@ -120,8 +120,49 @@ class ProcessSupervisor:
     def start(self):
         if self._thread and self._thread.is_alive():
             return
+        # On supervisor start, aggressively clean up any leftover runs from previous process
+        try:
+            self._cleanup_runs_on_startup()
+        except Exception:
+            pass
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
         self._thread.start()
+
+    def _cleanup_runs_on_startup(self):
+        """Kill any lingering processes recorded in CommandRun (stopped_at is NULL)
+
+        This is important when the webapp or supervisor restarts and orphaned
+        processes remain running on the system (e.g. manage.py workers).
+        """
+        runs = CommandRun.objects.filter(stopped_at__isnull=True)
+        if not runs.exists():
+            return
+        # Build lookup of patterns per site/command
+        for run in runs:
+            pid = run.pid
+            try:
+                if pid and _process_exists(pid):
+                    Log.objects.create(site=run.command.site, command=run.command, level='INFO', message=f'Cleaning up lingering process on startup: pid={pid}')
+                    _try_kill_pid(pid, signal.SIGTERM, wait=2.0)
+                    if _process_exists(pid):
+                        _try_kill_pid(pid, signal.SIGKILL, wait=0.5)
+            except Exception:
+                pass
+            try:
+                run.stopped_at = timezone.now()
+                run.save()
+            except Exception:
+                pass
+        # Additionally, attempt a broader command-line based cleanup for known command strings
+        try:
+            patterns = []
+            for cmd in Command.objects.all():
+                patterns.append(cmd.command_string)
+                patterns.append(f"manage.py {cmd.command_string}")
+            if patterns:
+                _kill_matching_processes(patterns)
+        except Exception:
+            pass
 
     def stop(self):
         self._stop.set()
