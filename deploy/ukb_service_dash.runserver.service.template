@@ -1,0 +1,23 @@
+; Development systemd service template for running Django's runserver (NOT for production)
+; Copy to /etc/systemd/system/ukb_service_dash-dev.service and edit paths and user.
+
+[Unit]
+Description=UKB Service Dashboard (development runserver)
+After=network.target
+
+[Service]
+Type=simple
+User=youruser
+Group=yourgroup
+WorkingDirectory=/path/to/UKB_Service_dash    ; <-- REPLACE with project path
+Environment="PATH=/path/to/UKB_Service_dash/.venv/bin"  ; <-- REPLACE with venv path
+ExecStart=/path/to/UKB_Service_dash/.venv/bin/python manage.py runserver 0.0.0.0:8000
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+
+; Enable and start:
+; sudo systemctl daemon-reload
+; sudo systemctl enable --now ukb_service_dash-dev.service

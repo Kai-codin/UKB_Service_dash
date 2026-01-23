@@ -1,0 +1,27 @@
+; Systemd service template for running the UKB Service Dashboard with Gunicorn
+; Copy to /etc/systemd/system/ukb_service_dash.service and edit PATHs and user/group.
+
+[Unit]
+Description=UKB Service Dashboard Gunicorn service
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/path/to/UKB_Service_dash    ; <-- REPLACE with project path
+Environment="PATH=/path/to/UKB_Service_dash/.venv/bin"  ; <-- REPLACE with venv path
+EnvironmentFile=/path/to/UKB_Service_dash/.env            ; <-- optional: load env vars
+ExecStart=/path/to/UKB_Service_dash/.venv/bin/gunicorn \
+  --workers 3 \
+  --bind unix:/run/ukb_service_dash.sock \
+  ukb_service_dash.wsgi:application
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+
+; After installing the unit:
+; sudo systemctl daemon-reload
+; sudo systemctl enable --now ukb_service_dash.service
