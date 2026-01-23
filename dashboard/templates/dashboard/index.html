@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>UKB Service Dashboard</title>
+  </head>
+  <body>
+    <h1>Sites</h1>
+    <ul>
+      {% for s in sites %}
+      <li>{{ s.name }} — {{ s.base_dir }}</li>
+      {% empty %}
+      <li>No sites defined</li>
+      {% endfor %}
+    </ul>
+    <p><a href="/admin/">Admin panel</a></p>
+  </body>
+</html>

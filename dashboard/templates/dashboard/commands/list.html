@@ -1,0 +1,33 @@
+{% extends 'dashboard/base.html' %}
+
+{% block content %}
+<h1>Commands</h1>
+<p><a href="{% url 'dashboard:command_add' %}">Add command</a></p>
+<table>
+  <tr><th>Name</th><th>Site</th><th>Command</th><th>Active</th><th>Actions</th></tr>
+  {% for c in commands %}
+  <tr>
+    <td>{{ c.name }}</td>
+    <td>{{ c.site.name }}</td>
+    <td>{{ c.command_string }}</td>
+    <td>{{ c.active }}</td>
+    <td>
+      <a href="{% url 'dashboard:command_edit' c.pk %}">Edit</a> |
+      <a href="{% url 'dashboard:command_delete' c.pk %}">Delete</a>
+      |
+      {% if c.id in running_command_ids %}
+        <form method="post" action="{% url 'dashboard:command_stop' c.pk %}" style="display:inline">{% csrf_token %}
+          <button type="submit">Stop</button>
+        </form>
+      {% else %}
+        <form method="post" action="{% url 'dashboard:command_start' c.pk %}" style="display:inline">{% csrf_token %}
+          <button type="submit">Start</button>
+        </form>
+      {% endif %}
+    </td>
+  </tr>
+  {% empty %}
+  <tr><td colspan="5">No commands found.</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

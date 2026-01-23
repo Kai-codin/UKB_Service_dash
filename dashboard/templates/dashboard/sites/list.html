@@ -1,0 +1,22 @@
+{% extends 'dashboard/base.html' %}
+
+{% block content %}
+<h1>Sites</h1>
+<p><a href="{% url 'dashboard:site_add' %}">Add site</a></p>
+<table>
+  <tr><th>Name</th><th>Base dir</th><th>Base command</th><th>Actions</th></tr>
+  {% for s in sites %}
+  <tr>
+    <td>{{ s.name }}</td>
+    <td>{{ s.base_dir }}</td>
+    <td>{{ s.base_command }}</td>
+    <td>
+      <a href="{% url 'dashboard:site_edit' s.pk %}">Edit</a> |
+      <a href="{% url 'dashboard:site_delete' s.pk %}">Delete</a>
+    </td>
+  </tr>
+  {% empty %}
+  <tr><td colspan="4">No sites found.</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

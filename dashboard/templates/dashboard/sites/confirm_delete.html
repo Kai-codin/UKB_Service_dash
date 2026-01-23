@@ -1,0 +1,10 @@
+{% extends 'dashboard/base.html' %}
+
+{% block content %}
+<h1>Delete Site</h1>
+<p>Are you sure you want to delete "{{ object }}"?</p>
+<form method="post">{% csrf_token %}
+  <button type="submit">Confirm delete</button>
+  <a href="{% url 'dashboard:site_list' %}">Cancel</a>
+</form>
+{% endblock %}

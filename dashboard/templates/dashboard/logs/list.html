@@ -1,0 +1,35 @@
+{% extends 'dashboard/base.html' %}
+
+{% block content %}
+<h1>Logs</h1>
+<form method="get">
+  <label>Site: <select name="site">
+    <option value="">All</option>
+    {% for s in sites %}
+      <option value="{{ s.id }}" {% if request.GET.site == s.id|stringformat:'s' %}selected{% endif %}>{{ s.name }}</option>
+    {% endfor %}
+  </select></label>
+  <label>Command: <select name="command">
+    <option value="">All</option>
+    {% for c in all_commands %}
+      <option value="{{ c.id }}" {% if request.GET.command == c.id|stringformat:'s' %}selected{% endif %}>{{ c.name }}</option>
+    {% endfor %}
+  </select></label>
+  <button type="submit">Filter</button>
+</form>
+
+<table>
+  <tr><th>Time</th><th>Site</th><th>Command</th><th>Level</th><th>Message</th></tr>
+  {% for l in logs %}
+  <tr>
+    <td>{{ l.created_at }}</td>
+    <td>{{ l.site }}</td>
+    <td>{{ l.command }}</td>
+    <td>{{ l.level }}</td>
+    <td>{{ l.message|truncatechars:200 }}</td>
+  </tr>
+  {% empty %}
+  <tr><td colspan="5">No logs found.</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

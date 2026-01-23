@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>UKB Service Dashboard</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 24px; }
+      nav a { margin-right: 12px; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { border: 1px solid #ddd; padding: 8px; }
+      th { background: #f2f2f2; }
+    </style>
+  </head>
+  <body>
+    <nav>
+      <a href="{% url 'dashboard:site_list' %}">Sites</a>
+      <a href="{% url 'dashboard:command_list' %}">Commands</a>
+      <a href="{% url 'dashboard:log_list' %}">Logs</a>
+      <a href="/admin/">Admin</a>
+      {% if user.is_authenticated %}
+        <span>Logged in as {{ user.username }}</span>
+      {% else %}
+        <a href="/admin/login/">Login</a>
+      {% endif %}
+    </nav>
+    <hr>
+    {% block content %}{% endblock %}
+  </body>
+</html>
