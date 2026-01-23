@@ -17,6 +17,33 @@ from .models import CommandRun, Command, Log, Site
 import requests
 
 
+def _try_kill_pid(pid: int, sig=signal.SIGTERM, wait: float = 1.0) -> None:
+    try:
+        # Try killing the process group first (covers children)
+        os.killpg(pid, sig)
+    except Exception:
+        try:
+            os.kill(pid, sig)
+        except Exception:
+            return
+
+    # wait briefly for process to exit
+    if wait and _process_exists(pid):
+        end = time.time() + wait
+        while time.time() < end:
+            if not _process_exists(pid):
+                return
+            time.sleep(0.1)
+        # force kill if still alive
+        try:
+            os.killpg(pid, signal.SIGKILL)
+        except Exception:
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except Exception:
+                pass
+
+
 def _process_exists(pid: int) -> bool:
     try:
         os.kill(pid, 0)
@@ -133,6 +160,27 @@ class ProcessSupervisor:
                         raise RuntimeError(f"Executable not found: {exe}")
                 # Otherwise fail
                 raise RuntimeError(f"Executable not found: {exe}")
+
+        # If this is an automatic restart, ensure we kill any other active runs
+        if restart_count and restart_count > 0:
+            try:
+                runs_existing = CommandRun.objects.filter(command=command, stopped_at__isnull=True)
+                for r in runs_existing:
+                    if r.pid and _process_exists(r.pid):
+                        Log.objects.create(site=site, command=command, level='INFO', message=f'Killing existing process before restart: pid={r.pid}')
+                        try:
+                            # first attempt graceful termination, then force
+                            _try_kill_pid(r.pid, signal.SIGTERM, wait=2.0)
+                        except Exception:
+                            pass
+                        try:
+                            # mark run stopped in DB
+                            r.stopped_at = timezone.now()
+                            r.save()
+                        except Exception:
+                            pass
+            except Exception:
+                pass
 
         # Start the process (capture output)
         proc = subprocess.Popen(
