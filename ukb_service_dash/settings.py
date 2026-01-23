@@ -13,6 +13,8 @@ DEBUG = env('DEBUG')
 
 ALLOWED_HOSTS = ['*']
 
+CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[])
+
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
