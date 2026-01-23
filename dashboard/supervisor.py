@@ -6,6 +6,7 @@ import time
 from datetime import datetime
 import shlex
 import shutil
+import sys
 
 from django.conf import settings
 from django.utils import timezone
@@ -111,6 +112,25 @@ class ProcessSupervisor:
                     level='ERROR',
                     message=f"Executable not found: '{exe}' when attempting to start command: {cmd_line}",
                 )
+                # If docker (or sudo + docker) was expected, try a safe fallback: run the command via the venv python manage.py
+                if 'docker' in exe or 'docker' in cmd_line or exe == 'sudo':
+                    try:
+                        py = sys.executable
+                        # If the command_string looks like a manage.py subcommand, use that
+                        fallback_cmd = f"{shlex.quote(py)} manage.py {command.command_string}"
+                        proc = subprocess.Popen(fallback_cmd, shell=True, cwd=site.base_dir or None, preexec_fn=os.setsid)
+                        run = CommandRun.objects.create(
+                            command=command,
+                            pid=proc.pid,
+                            restart_count=restart_count,
+                            manually_stopped=False,
+                        )
+                        Log.objects.create(site=site, command=command, level='WARNING', message=f"Fell back to local manage.py for command: {command.command_string}")
+                        return run
+                    except Exception as e:
+                        Log.objects.create(site=site, command=command, level='ERROR', message=f"Fallback to local manage.py failed: {e}")
+                        raise RuntimeError(f"Executable not found: {exe}")
+                # Otherwise fail
                 raise RuntimeError(f"Executable not found: {exe}")
 
         # Start the process
