@@ -44,6 +44,64 @@ def _try_kill_pid(pid: int, sig=signal.SIGTERM, wait: float = 1.0) -> None:
                 pass
 
 
+    def _kill_matching_processes(patterns: list, site: Site = None, command_obj: Command = None) -> None:
+        """Aggressively kill processes whose command line matches any pattern.
+
+        Tries to use psutil when available; otherwise falls back to `pgrep -f`.
+        """
+        pids = set()
+
+        # Try psutil first
+        try:
+            import psutil
+            for proc in psutil.process_iter(['pid', 'cmdline']):
+                try:
+                    cmdline = ' '.join(proc.info.get('cmdline') or [])
+                    if not cmdline:
+                        continue
+                    for pat in patterns:
+                        if pat in cmdline:
+                            pids.add(proc.info['pid'])
+                            break
+                except Exception:
+                    continue
+        except Exception:
+            # Fallback: use pgrep -f to find pids for each pattern
+            for pat in patterns:
+                try:
+                    cmd = f"pgrep -f {shlex.quote(pat)}"
+                    out = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+                    if out.returncode == 0 and out.stdout:
+                        for line in out.stdout.splitlines():
+                            try:
+                                pids.add(int(line.strip()))
+                            except Exception:
+                                continue
+                except Exception:
+                    continue
+
+        for pid in list(pids):
+            try:
+                Log.objects.create(site=site, command=command_obj, level='INFO', message=f'Killing matched process before restart: pid={pid}')
+            except Exception:
+                pass
+            try:
+                _try_kill_pid(pid, signal.SIGTERM, wait=2.0)
+            except Exception:
+                pass
+            # mark any DB runs with this pid as stopped
+            try:
+                runs = CommandRun.objects.filter(pid=pid, stopped_at__isnull=True)
+                for r in runs:
+                    try:
+                        r.stopped_at = timezone.now()
+                        r.save()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+
 def _process_exists(pid: int) -> bool:
     try:
         os.kill(pid, 0)
@@ -164,21 +222,9 @@ class ProcessSupervisor:
         # If this is an automatic restart, ensure we kill any other active runs
         if restart_count and restart_count > 0:
             try:
-                runs_existing = CommandRun.objects.filter(command=command, stopped_at__isnull=True)
-                for r in runs_existing:
-                    if r.pid and _process_exists(r.pid):
-                        Log.objects.create(site=site, command=command, level='INFO', message=f'Killing existing process before restart: pid={r.pid}')
-                        try:
-                            # first attempt graceful termination, then force
-                            _try_kill_pid(r.pid, signal.SIGTERM, wait=2.0)
-                        except Exception:
-                            pass
-                        try:
-                            # mark run stopped in DB
-                            r.stopped_at = timezone.now()
-                            r.save()
-                        except Exception:
-                            pass
+                # build patterns to search for existing processes
+                patterns = [cmd_line, command.command_string, f"manage.py {command.command_string}"]
+                _kill_matching_processes(patterns, site=site, command_obj=command)
             except Exception:
                 pass
 
