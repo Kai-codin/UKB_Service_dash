@@ -4,11 +4,13 @@ import subprocess
 import threading
 import time
 from datetime import datetime
+import shlex
+import shutil
 
 from django.conf import settings
 from django.utils import timezone
 
-from .models import CommandRun, Command
+from .models import CommandRun, Command, Log
 
 import requests
 
@@ -85,7 +87,33 @@ class ProcessSupervisor:
 
     def start_command(self, command: Command, restart_count: int = 0) -> CommandRun:
         site = command.site
+        # Build full command line
         cmd_line = f"{site.base_command} {command.command_string}" if site.base_command else command.command_string
+
+        # Sanitize: remove leading sudo tokens so we don't depend on sudo being available
+        try:
+            parts = shlex.split(cmd_line)
+        except Exception:
+            parts = cmd_line.split()
+
+        while parts and parts[0] == 'sudo':
+            parts.pop(0)
+
+        # Ensure the executable exists on PATH (check first token)
+        if parts:
+            exe = parts[0]
+            # If command is a shell built-in/compound, skip check; otherwise verify presence
+            if shutil.which(exe) is None:
+                # Log the failure and avoid tight restart loops
+                Log.objects.create(
+                    site=site,
+                    command=command,
+                    level='ERROR',
+                    message=f"Executable not found: '{exe}' when attempting to start command: {cmd_line}",
+                )
+                raise RuntimeError(f"Executable not found: {exe}")
+
+        # Start the process
         proc = subprocess.Popen(cmd_line, shell=True, cwd=site.base_dir or None, preexec_fn=os.setsid)
         run = CommandRun.objects.create(
             command=command,
