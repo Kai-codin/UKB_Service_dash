@@ -46,6 +46,7 @@ class CommandRun(models.Model):
     stopped_at = models.DateTimeField(null=True, blank=True)
     exit_code = models.IntegerField(null=True, blank=True)
     manually_stopped = models.BooleanField(default=False)
+    killed = models.BooleanField(default=False)
     restart_count = models.IntegerField(default=0)
 
     class Meta:

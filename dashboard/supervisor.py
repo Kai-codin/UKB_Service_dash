@@ -89,12 +89,13 @@ def _try_kill_pid(pid: int, sig=signal.SIGTERM, wait: float = 1.0) -> None:
                 _try_kill_pid(pid, signal.SIGTERM, wait=2.0)
             except Exception:
                 pass
-            # mark any DB runs with this pid as stopped
+            # mark any DB runs with this pid as stopped and killed
             try:
                 runs = CommandRun.objects.filter(pid=pid, stopped_at__isnull=True)
                 for r in runs:
                     try:
                         r.stopped_at = timezone.now()
+                        r.killed = True
                         r.save()
                     except Exception:
                         pass
@@ -139,6 +140,9 @@ class ProcessSupervisor:
             return
         # Build lookup of patterns per site/command
         for run in runs:
+            # Only act on runs not already marked killed
+            if getattr(run, 'killed', False):
+                continue
             pid = run.pid
             try:
                 if pid and _process_exists(pid):
@@ -150,6 +154,7 @@ class ProcessSupervisor:
                 pass
             try:
                 run.stopped_at = timezone.now()
+                run.killed = True
                 run.save()
             except Exception:
                 pass
@@ -342,6 +347,7 @@ class ProcessSupervisor:
         for run in runs:
             pid = run.pid
             run.manually_stopped = True
+            run.killed = True
             try:
                 if pid:
                     os.killpg(pid, signal.SIGTERM)

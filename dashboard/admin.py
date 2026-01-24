@@ -23,6 +23,6 @@ class LogAdmin(admin.ModelAdmin):
 
 @admin.register(CommandRun)
 class CommandRunAdmin(admin.ModelAdmin):
-    list_display = ('command', 'pid', 'started_at', 'stopped_at', 'manually_stopped', 'restart_count')
-    list_filter = ('manually_stopped', 'command__site')
-    readonly_fields = ('pid', 'started_at', 'stopped_at', 'exit_code', 'restart_count')
+    list_display = ('command', 'pid', 'started_at', 'stopped_at', 'manually_stopped', 'killed', 'restart_count')
+    list_filter = ('manually_stopped', 'command__site', 'killed')
+    readonly_fields = ('pid', 'started_at', 'stopped_at', 'exit_code', 'restart_count', 'killed')
