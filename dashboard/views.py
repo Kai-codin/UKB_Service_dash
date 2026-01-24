@@ -109,10 +109,23 @@ def start_command_view(request, pk):
     if request.method != 'POST':
         return HttpResponseForbidden('POST required')
     cmd = get_object_or_404(Command, pk=pk)
-    # ensure only one running
+    # First, aggressively kill any lingering system processes for this command
+    try:
+        from .supervisor import _kill_matching_processes
+        patterns = []
+        if cmd.site.base_command:
+            patterns.append(f"{cmd.site.base_command} {cmd.command_string}")
+        patterns.append(cmd.command_string)
+        patterns.append(f"manage.py {cmd.command_string}")
+        _kill_matching_processes(patterns, site=cmd.site, command_obj=cmd)
+    except Exception:
+        pass
+
+    # ensure only one running in DB after cleanup
     active = cmd.runs.filter(stopped_at__isnull=True)
     if active.exists():
-        return HttpResponse('already running')
+        messages.info(request, f"Command '{cmd.name}' already running after cleanup.")
+        return redirect('dashboard:command_list')
     try:
         supervisor.start_command(cmd)
         messages.success(request, f"Started command '{cmd.name}'.")
